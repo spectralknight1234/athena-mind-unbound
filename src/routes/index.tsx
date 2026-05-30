@@ -88,8 +88,8 @@ function AtenaChat() {
     setAttachments((prev) => [...prev, ...imgs].slice(0, 4));
   };
 
-  const send = async () => {
-    const text = input.trim();
+  const send = async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim();
     if (!text && attachments.length === 0) return;
     if (isLoading) return;
 
@@ -230,7 +230,7 @@ function AtenaChat() {
         className="mx-auto w-full max-w-4xl flex-1 overflow-y-auto px-4 py-6"
       >
         {messages.length === 0 ? (
-          <Welcome onPick={(p) => setInput(p)} />
+          <Welcome onSend={(p) => send(p)} />
         ) : (
           <div className="flex flex-col gap-5">
             {messages.map((m) => (
@@ -326,7 +326,7 @@ function AtenaChat() {
               disabled={isLoading}
             />
             <button
-              onClick={send}
+              onClick={() => send()}
               disabled={
                 isLoading ||
                 (!input.trim() && attachments.length === 0)
@@ -345,7 +345,7 @@ function AtenaChat() {
               )}
             </button>
           </div>
-          <p className="mt-2 text-center text-[11px] text-muted-foreground">
+          <p className="mt-2.5 text-center text-xs text-foreground/60">
             Atena pode cometer erros. Verifique informações importantes.
           </p>
         </div>
@@ -388,7 +388,7 @@ function ModeButton({
   );
 }
 
-function Welcome({ onPick }: { onPick: (p: string) => void }) {
+function Welcome({ onSend }: { onSend: (p: string) => void }) {
   const suggestions = [
     "Explique computação quântica como se eu tivesse 12 anos",
     "Crie um plano de estudos de 30 dias para aprender Python",
@@ -416,7 +416,7 @@ function Welcome({ onPick }: { onPick: (p: string) => void }) {
         {suggestions.map((s) => (
           <button
             key={s}
-            onClick={() => onPick(s)}
+            onClick={() => onSend(s)}
             className="glass rounded-xl px-4 py-3 text-left text-sm text-foreground transition hover:border-primary/40 hover:shadow-glow"
           >
             {s}
