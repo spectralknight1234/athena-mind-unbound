@@ -230,7 +230,7 @@ function AtenaChat() {
         className="mx-auto w-full max-w-4xl flex-1 overflow-y-auto px-4 py-6"
       >
         {messages.length === 0 ? (
-          <Welcome onPick={(p) => setInput(p)} />
+          <Welcome onSend={(p) => send(p)} />
         ) : (
           <div className="flex flex-col gap-5">
             {messages.map((m) => (
