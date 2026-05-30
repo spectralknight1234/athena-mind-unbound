@@ -88,8 +88,8 @@ function AtenaChat() {
     setAttachments((prev) => [...prev, ...imgs].slice(0, 4));
   };
 
-  const send = async () => {
-    const text = input.trim();
+  const send = async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim();
     if (!text && attachments.length === 0) return;
     if (isLoading) return;
 
