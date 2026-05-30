@@ -416,7 +416,7 @@ function Welcome({ onSend }: { onSend: (p: string) => void }) {
         {suggestions.map((s) => (
           <button
             key={s}
-            onClick={() => onPick(s)}
+            onClick={() => onSend(s)}
             className="glass rounded-xl px-4 py-3 text-left text-sm text-foreground transition hover:border-primary/40 hover:shadow-glow"
           >
             {s}
