@@ -345,7 +345,7 @@ function AtenaChat() {
               )}
             </button>
           </div>
-          <p className="mt-2 text-center text-[11px] text-muted-foreground">
+          <p className="mt-2.5 text-center text-xs text-foreground/60">
             Atena pode cometer erros. Verifique informações importantes.
           </p>
         </div>
