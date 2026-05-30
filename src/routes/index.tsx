@@ -326,7 +326,7 @@ function AtenaChat() {
               disabled={isLoading}
             />
             <button
-              onClick={send}
+              onClick={() => send()}
               disabled={
                 isLoading ||
                 (!input.trim() && attachments.length === 0)
