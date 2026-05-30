@@ -388,7 +388,7 @@ function ModeButton({
   );
 }
 
-function Welcome({ onPick }: { onPick: (p: string) => void }) {
+function Welcome({ onSend }: { onSend: (p: string) => void }) {
   const suggestions = [
     "Explique computação quântica como se eu tivesse 12 anos",
     "Crie um plano de estudos de 30 dias para aprender Python",
