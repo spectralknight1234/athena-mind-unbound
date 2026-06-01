@@ -202,32 +202,10 @@ function AtenaChat() {
       <AuroraBackground />
       <Toaster />
 
-      {/* Header */}
-      <header className="sticky top-0 z-10 glass border-b border-border/60">
-        <div className="mx-auto flex max-w-4xl items-center gap-3 px-4 py-3">
-          <div
-            className="flex h-10 w-10 items-center justify-center rounded-xl shadow-glow"
-            style={{
-              background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))",
-            }}
-          >
-            <Sparkles className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <div className="flex-1">
-            <h1 className="text-lg font-semibold leading-tight">
-              <span className="text-aurora">Atena</span>
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              IA multimodal • chat, visão e geração de imagens
-            </p>
-          </div>
-        </div>
-      </header>
-
       {/* Messages */}
       <main
         ref={scrollRef}
-        className="mx-auto w-full max-w-4xl flex-1 overflow-y-auto px-4 py-6"
+        className="mx-auto w-full max-w-4xl flex-1 overflow-y-auto px-3 pb-4 pt-[max(env(safe-area-inset-top),0.75rem)] sm:px-4 sm:pt-6"
       >
         {messages.length === 0 ? (
           <Welcome onSend={(p) => send(p)} />
