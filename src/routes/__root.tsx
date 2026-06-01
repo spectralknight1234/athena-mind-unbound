@@ -8,6 +8,7 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -122,19 +123,11 @@ function RootComponent() {
   const router = useRouter();
 
   useEffect(() => {
-    let mounted = true;
-    import("@/integrations/supabase/client").then(({ supabase }) => {
-      if (!mounted) return;
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-        router.invalidate();
-        queryClient.invalidateQueries();
-      });
-      // store unsubscribe via closure-friendly hack
-      (mounted as unknown as { sub?: { unsubscribe: () => void } }).sub = subscription;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+      router.invalidate();
+      queryClient.invalidateQueries();
     });
-    return () => {
-      mounted = false;
-    };
+    return () => subscription.unsubscribe();
   }, [router, queryClient]);
 
   return (
