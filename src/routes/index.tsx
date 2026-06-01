@@ -368,39 +368,69 @@ function ModeButton({
 
 function Welcome({ onSend }: { onSend: (p: string) => void }) {
   const suggestions = [
-    "Explique computação quântica como se eu tivesse 12 anos",
-    "Crie um plano de estudos de 30 dias para aprender Python",
-    "Escreva um e-mail formal de proposta comercial",
-    "Resuma os principais eventos do século XX",
+    {
+      short: "Computação quântica",
+      full: "Explique computação quântica como se eu tivesse 12 anos",
+    },
+    {
+      short: "Plano de Python em 30 dias",
+      full: "Crie um plano de estudos de 30 dias para aprender Python",
+    },
+    {
+      short: "E-mail de proposta comercial",
+      full: "Escreva um e-mail formal de proposta comercial",
+    },
+    {
+      short: "Resumo do século XX",
+      full: "Resuma os principais eventos do século XX",
+    },
   ];
   return (
-    <div className="flex flex-col items-center justify-center py-10 text-center">
+    <div className="flex flex-col items-center justify-center py-8 text-center sm:py-10">
       <div
-        className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl shadow-glow"
+        className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl shadow-glow sm:mb-5 sm:h-16 sm:w-16"
         style={{
           background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))",
         }}
       >
-        <Sparkles className="h-8 w-8 text-primary-foreground" />
+        <Sparkles className="h-7 w-7 text-primary-foreground sm:h-8 sm:w-8" />
       </div>
-      <h2 className="mb-2 text-3xl font-semibold tracking-tight">
+      <h2 className="mb-2 text-2xl font-semibold tracking-tight sm:text-3xl">
         Olá, sou a <span className="text-aurora">Atena</span>
       </h2>
-      <p className="mb-8 max-w-md text-sm text-muted-foreground">
+      <p className="mb-6 max-w-md text-sm text-muted-foreground sm:mb-8">
         Sua IA multimodal — converse, envie imagens para análise ou gere arte
         digital com um clique.
       </p>
-      <div className="grid w-full max-w-2xl grid-cols-1 gap-2 sm:grid-cols-2">
+
+      {/* Mobile: horizontal scroll chips */}
+      <div className="-mx-3 w-screen max-w-[100vw] overflow-x-auto px-3 pb-1 sm:hidden">
+        <div className="flex w-max gap-2">
+          {suggestions.map((s) => (
+            <button
+              key={s.full}
+              onClick={() => onSend(s.full)}
+              className="glass shrink-0 rounded-full px-4 py-2 text-xs font-medium text-foreground transition active:scale-95"
+            >
+              {s.short}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Desktop: grid with full prompts */}
+      <div className="hidden w-full max-w-2xl grid-cols-2 gap-2 sm:grid">
         {suggestions.map((s) => (
           <button
-            key={s}
-            onClick={() => onSend(s)}
+            key={s.full}
+            onClick={() => onSend(s.full)}
             className="glass rounded-xl px-4 py-3 text-left text-sm text-foreground transition hover:border-primary/40 hover:shadow-glow"
           >
-            {s}
+            {s.full}
           </button>
         ))}
       </div>
     </div>
   );
 }
+
