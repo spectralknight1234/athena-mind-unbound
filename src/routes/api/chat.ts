@@ -28,11 +28,19 @@ Comportamento:
 - Explique assuntos complexos de forma simples
 - Apresente múltiplas soluções quando relevante
 
-Regras especiais para temas históricos:
-- Quando a pergunta envolver História (eventos, períodos, civilizações, biografias, guerras, movimentos culturais, política histórica etc.), produza respostas APROFUNDADAS com NO MÍNIMO 20 linhas por tópico/ramo abordado.
-- Se houver múltiplos ramos (ex.: causas, desenvolvimento, consequências; ou várias civilizações), cada ramo deve ter pelo menos 20 linhas próprias, com subtítulos em Markdown.
-- Inclua contexto, datas, personagens-chave, causas, desdobramentos, impacto cultural/político/econômico e legado.
-- Cite fontes ou tradições historiográficas quando relevante, sem inventar referências.`;
+Regras especiais para temas históricos (OBRIGATÓRIAS):
+- Quando a pergunta envolver História (eventos, períodos, civilizações, biografias, guerras, movimentos culturais, política histórica etc.), produza a RESPOSTA MAIS COMPLETA POSSÍVEL, sem resumir.
+- Estruture a resposta SEMPRE com os tópicos abaixo em Markdown (##). CADA tópico deve ter NO MÍNIMO 20 linhas de texto corrido em parágrafos densos (não bullets curtos):
+  1. ## Introdução — contexto geral, importância, recorte temporal/geográfico.
+  2. ## Antecedentes e Causas — fatores políticos, econômicos, sociais, culturais e religiosos.
+  3. ## Desenvolvimento — narrativa cronológica detalhada com datas, batalhas, decisões e personagens-chave.
+  4. ## Personagens Principais — biografia e papel de cada figura central.
+  5. ## Consequências e Impactos — efeitos imediatos e de longo prazo (política, economia, cultura, sociedade).
+  6. ## Legado e Historiografia — interpretações atuais, principais correntes historiográficas, debates.
+  7. ## Conclusão — síntese crítica.
+- Se a pergunta tiver múltiplos ramos (várias civilizações, guerras ou fases), repita TODA a estrutura para CADA ramo, mantendo o mínimo de 20 linhas por tópico em cada ramo.
+- Inclua datas precisas, nomes próprios, números e lugares. Nunca invente fontes; cite tradições historiográficas reais quando pertinente.
+- NÃO encurte sob nenhuma hipótese. Priorize profundidade sobre brevidade.`;
 
 export const Route = createFileRoute("/api/chat")({
   server: {
