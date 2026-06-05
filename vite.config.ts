@@ -10,7 +10,7 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 // Vercel automatically. The Lovable config wrapper defaults Nitro output to
 // `dist`, so Vercel needs an explicit `.vercel/output` layout.
 const isVercelBuild = process.env.VERCEL === "1" || process.env.VERCEL === "true";
-const nitroPreset = process.env.NITRO_PRESET ?? (isVercelBuild ? "vercel" : undefined);
+const nitroPreset = isVercelBuild ? "vercel" : process.env.NITRO_PRESET;
 const isCloudflare = !nitroPreset || nitroPreset === "cloudflare-module";
 const vercelOutput = {
   dir: ".vercel/output",
