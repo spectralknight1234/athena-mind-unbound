@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -11,14 +11,12 @@ import {
   Loader2,
   Menu,
   Plus,
-  LogOut,
   Trash2,
 } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { AuroraBackground } from "@/components/atena/AuroraBackground";
 import { Message, type AtenaMessage } from "@/components/atena/Message";
 import { streamChat, streamImage } from "@/lib/atena-stream";
-import { supabase } from "@/integrations/supabase/client";
 import {
   type Conversation,
   createConversation,
@@ -31,7 +29,7 @@ import {
   updateAssistantMessage,
 } from "@/lib/chat-db";
 
-export const Route = createFileRoute("/_authenticated/")({
+export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Atena — IA Multimodal" },
@@ -57,7 +55,6 @@ async function fileToDataURL(file: File): Promise<string> {
 }
 
 function AtenaChat() {
-  const navigate = useNavigate();
   const [messages, setMessages] = useState<AtenaMessage[]>([]);
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<string[]>([]);
@@ -66,19 +63,13 @@ function AtenaChat() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [userEmail, setUserEmail] = useState<string>("");
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      setUserEmail(data.user?.email ?? "");
-      const list = await listConversations().catch(() => []);
-      setConversations(list);
-    })();
+    listConversations().then(setConversations).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -131,11 +122,6 @@ function AtenaChat() {
     }
   };
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    navigate({ to: "/login", replace: true });
-  };
-
   const handleAttach = async (files: FileList | null) => {
     if (!files) return;
     const imgs: string[] = [];
@@ -156,6 +142,10 @@ function AtenaChat() {
     setActiveId(conv.id);
     setConversations((prev) => [conv, ...prev]);
     return conv.id;
+  };
+
+  const refreshConversations = () => {
+    listConversations().then(setConversations).catch(() => {});
   };
 
   const send = async (overrideText?: string) => {
@@ -315,15 +305,10 @@ function AtenaChat() {
       setIsLoading(false);
     }
 
-    // Rename conversation to first user message if still default
     const current = conversations.find((c) => c.id === conversationId);
     if (current && current.title === "Nova conversa" && text) {
       renameConversation(conversationId, text).catch(() => {});
     }
-  };
-
-  const refreshConversations = () => {
-    listConversations().then(setConversations).catch(() => {});
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -427,14 +412,9 @@ function AtenaChat() {
             </div>
 
             <div className="mt-3 border-t border-border/60 pt-3">
-              <p className="mb-2 truncate px-1 text-xs text-muted-foreground">{userEmail}</p>
-              <button
-                onClick={signOut}
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted/30 hover:text-foreground"
-              >
-                <LogOut className="h-4 w-4" />
-                Sair
-              </button>
+              <p className="px-1 text-xs text-muted-foreground">
+                Suas conversas ficam salvas apenas neste navegador.
+              </p>
             </div>
           </aside>
         </div>
