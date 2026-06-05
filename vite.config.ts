@@ -6,19 +6,17 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
-// Allow overriding the Nitro deploy preset via env var so the same codebase
-// can be deployed to Cloudflare (default, used by Lovable) or Vercel.
-//   - Lovable / sandbox build: preset stays "cloudflare-module" and the
-//     custom src/server.ts wrapper (Cloudflare `export default { fetch }`)
-//     is used.
-//   - Vercel build: set NITRO_PRESET=vercel in the Vercel project's
-//     Environment Variables. We then drop the custom server entry so Nitro
-//     generates its own Node-compatible handler. Nitro emits `.vercel/output`
-//     which Vercel auto-detects (Build Output API v3) — leave Vercel's
-//     framework preset as "Other", Build Command = `bun run build`,
-//     Output Directory = `.vercel/output`.
-const nitroPreset = process.env.NITRO_PRESET;
+// Allow overriding the Nitro deploy preset via env var while also detecting
+// Vercel automatically. The Lovable config wrapper defaults Nitro output to
+// `dist`, so Vercel needs an explicit `.vercel/output` layout.
+const isVercelBuild = process.env.VERCEL === "1" || process.env.VERCEL === "true";
+const nitroPreset = isVercelBuild ? "vercel" : process.env.NITRO_PRESET;
 const isCloudflare = !nitroPreset || nitroPreset === "cloudflare-module";
+const vercelOutput = {
+  dir: ".vercel/output",
+  serverDir: ".vercel/output/functions/__server.func",
+  publicDir: ".vercel/output/static",
+};
 
 export default defineConfig({
   ...(isCloudflare
@@ -29,5 +27,12 @@ export default defineConfig({
         },
       }
     : {}),
-  ...(nitroPreset ? { nitro: { preset: nitroPreset } } : {}),
+  ...(nitroPreset
+    ? {
+        nitro: {
+          preset: nitroPreset,
+          ...(nitroPreset === "vercel" ? { output: vercelOutput } : {}),
+        },
+      }
+    : {}),
 });
