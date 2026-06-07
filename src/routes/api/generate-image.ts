@@ -4,9 +4,9 @@ export const Route = createFileRoute("/api/generate-image")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const apiKey = process.env.LOVABLE_API_KEY;
+        const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) {
-          return new Response("Missing LOVABLE_API_KEY", { status: 500 });
+          return new Response("GEMINI_API_KEY não configurada", { status: 500 });
         }
 
         const { prompt } = (await request.json()) as { prompt: string };
@@ -15,34 +15,44 @@ export const Route = createFileRoute("/api/generate-image")({
         }
 
         const upstream = await fetch(
-          "https://ai.gateway.lovable.dev/v1/images/generations",
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`,
           {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              model: "openai/gpt-image-2",
-              prompt,
-              quality: "low",
-              size: "1024x1024",
-              n: 1,
-              stream: true,
-              partial_images: 1,
+              contents: [{ role: "user", parts: [{ text: prompt }] }],
+              generationConfig: { responseModalities: ["IMAGE"] },
             }),
             signal: request.signal,
           },
         );
 
-        if (!upstream.ok || !upstream.body) {
+        if (!upstream.ok) {
           const text = await upstream.text().catch(() => "");
+          console.error("Gemini image error:", upstream.status, text);
           return new Response(text || "Falha na geração de imagem", {
             status: upstream.status,
           });
         }
 
-        return new Response(upstream.body, {
+        const json = (await upstream.json()) as {
+          candidates?: Array<{
+            content?: { parts?: Array<{ inlineData?: { data: string; mimeType: string } }> };
+          }>;
+        };
+
+        const part = json.candidates?.[0]?.content?.parts?.find((p) => p.inlineData);
+        const b64 = part?.inlineData?.data;
+        if (!b64) {
+          return new Response("Imagem não retornada pelo Gemini", { status: 500 });
+        }
+
+        const encoder = new TextEncoder();
+        const sse =
+          `event: image_generation.completed\n` +
+          `data: ${JSON.stringify({ b64_json: b64 })}\n\n`;
+
+        return new Response(encoder.encode(sse), {
           headers: {
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache",
