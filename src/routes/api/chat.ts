@@ -255,6 +255,53 @@ export const Route = createFileRoute("/api/chat")({
         let finishReason = "";
         let chunks = 0;
 
+        const emitGeminiData = (
+          data: string,
+          controller: ReadableStreamDefaultController<Uint8Array>,
+        ) => {
+          try {
+            const parsed = JSON.parse(data);
+            const parts = parsed?.candidates?.[0]?.content?.parts as
+              | Array<{ text?: string }>
+              | undefined;
+            const reason = parsed?.candidates?.[0]?.finishReason;
+            if (typeof reason === "string") finishReason = reason;
+            const text = parts?.map((p) => p.text ?? "").join("") ?? "";
+            if (text) {
+              chunks += 1;
+              const out = { choices: [{ delta: { content: text } }] };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(out)}\n\n`));
+            }
+          } catch (err) {
+            console.warn(
+              JSON.stringify({
+                scope: "gemini.chat",
+                reqId,
+                level: "warn",
+                event: "parse_error",
+                msg: redact(err instanceof Error ? err.message : String(err), apiKey),
+              }),
+            );
+          }
+        };
+
+        const drainBuffer = (
+          controller: ReadableStreamDefaultController<Uint8Array>,
+          flush = false,
+        ) => {
+          if (flush && buffer.trim()) buffer += "\n";
+          let nl: number;
+          while ((nl = buffer.indexOf("\n")) !== -1) {
+            let line = buffer.slice(0, nl);
+            buffer = buffer.slice(nl + 1);
+            if (line.endsWith("\r")) line = line.slice(0, -1);
+            if (!line.startsWith("data: ")) continue;
+            const data = line.slice(6).trim();
+            if (!data) continue;
+            emitGeminiData(data, controller);
+          }
+        };
+
         const stream = new ReadableStream({
           async pull(controller) {
             try {
@@ -262,6 +309,7 @@ export const Route = createFileRoute("/api/chat")({
               if (done) {
                 const rest = decoder.decode();
                 if (rest) buffer += rest;
+                drainBuffer(controller, true);
                 controller.enqueue(encoder.encode("data: [DONE]\n\n"));
                 controller.close();
                 console.log(
@@ -278,39 +326,7 @@ export const Route = createFileRoute("/api/chat")({
                 return;
               }
               buffer += decoder.decode(value, { stream: true });
-              let nl: number;
-              while ((nl = buffer.indexOf("\n")) !== -1) {
-                let line = buffer.slice(0, nl);
-                buffer = buffer.slice(nl + 1);
-                if (line.endsWith("\r")) line = line.slice(0, -1);
-                if (!line.startsWith("data: ")) continue;
-                const data = line.slice(6).trim();
-                if (!data) continue;
-                try {
-                  const parsed = JSON.parse(data);
-                  const parts = parsed?.candidates?.[0]?.content?.parts as
-                    | Array<{ text?: string }>
-                    | undefined;
-                  const reason = parsed?.candidates?.[0]?.finishReason;
-                  if (typeof reason === "string") finishReason = reason;
-                  const text = parts?.map((p) => p.text ?? "").join("") ?? "";
-                  if (text) {
-                    chunks += 1;
-                    const out = { choices: [{ delta: { content: text } }] };
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(out)}\n\n`));
-                  }
-                } catch (err) {
-                  console.warn(
-                    JSON.stringify({
-                      scope: "gemini.chat",
-                      reqId,
-                      level: "warn",
-                      event: "parse_error",
-                      msg: redact(err instanceof Error ? err.message : String(err), apiKey),
-                    }),
-                  );
-                }
-              }
+              drainBuffer(controller);
             } catch (err) {
               console.error(
                 JSON.stringify({
