@@ -310,6 +310,23 @@ export const Route = createFileRoute("/api/chat")({
                 const rest = decoder.decode();
                 if (rest) buffer += rest;
                 drainBuffer(controller, true);
+                if (finishReason === "MAX_TOKENS") {
+                  const out = {
+                    error:
+                      "O Gemini atingiu o limite máximo de saída antes de concluir. Tente pedir em partes menores.",
+                  };
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(out)}\n\n`));
+                  console.warn(
+                    JSON.stringify({
+                      scope: "gemini.chat",
+                      reqId,
+                      level: "warn",
+                      event: "max_tokens_reached",
+                      durationMs: Date.now() - t0,
+                      chunks,
+                    }),
+                  );
+                }
                 controller.enqueue(encoder.encode("data: [DONE]\n\n"));
                 controller.close();
                 console.log(
