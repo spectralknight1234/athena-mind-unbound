@@ -42,6 +42,9 @@ Regras especiais para temas históricos (OBRIGATÓRIAS):
 - Inclua datas precisas, nomes próprios, números e lugares. Nunca invente fontes; cite tradições historiográficas reais quando pertinente.
 - NÃO encurte sob nenhuma hipótese. Priorize profundidade sobre brevidade.`;
 
+const GEMINI_MODEL = "gemini-2.5-flash";
+const MAX_OUTPUT_TOKENS = 65536;
+
 type GeminiPart =
   | { text: string }
   | { inlineData: { mimeType: string; data: string } };
@@ -150,22 +153,28 @@ export const Route = createFileRoute("/api/chat")({
             reqId,
             level: "info",
             event: "upstream_request",
-            model: "gemini-2.5-flash",
+            model: GEMINI_MODEL,
             messages: messages.length,
+            maxOutputTokens: MAX_OUTPUT_TOKENS,
           }),
         );
 
         let upstream: Response;
         try {
           upstream = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${apiKey}`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
                 contents: toGeminiContents(messages),
-                generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
+                generationConfig: {
+                  temperature: 0.7,
+                  maxOutputTokens: MAX_OUTPUT_TOKENS,
+                  // Evita gastar a janela de saída com raciocínio interno e reduz respostas cortadas.
+                  thinkingConfig: { thinkingBudget: 0 },
+                },
               }),
               signal: request.signal,
             },
@@ -243,12 +252,81 @@ export const Route = createFileRoute("/api/chat")({
         const decoder = new TextDecoder();
         const encoder = new TextEncoder();
         let buffer = "";
+        let finishReason = "";
+        let chunks = 0;
+
+        const emitGeminiData = (
+          data: string,
+          controller: ReadableStreamDefaultController<Uint8Array>,
+        ) => {
+          try {
+            const parsed = JSON.parse(data);
+            const parts = parsed?.candidates?.[0]?.content?.parts as
+              | Array<{ text?: string }>
+              | undefined;
+            const reason = parsed?.candidates?.[0]?.finishReason;
+            if (typeof reason === "string") finishReason = reason;
+            const text = parts?.map((p) => p.text ?? "").join("") ?? "";
+            if (text) {
+              chunks += 1;
+              const out = { choices: [{ delta: { content: text } }] };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(out)}\n\n`));
+            }
+          } catch (err) {
+            console.warn(
+              JSON.stringify({
+                scope: "gemini.chat",
+                reqId,
+                level: "warn",
+                event: "parse_error",
+                msg: redact(err instanceof Error ? err.message : String(err), apiKey),
+              }),
+            );
+          }
+        };
+
+        const drainBuffer = (
+          controller: ReadableStreamDefaultController<Uint8Array>,
+          flush = false,
+        ) => {
+          if (flush && buffer.trim()) buffer += "\n";
+          let nl: number;
+          while ((nl = buffer.indexOf("\n")) !== -1) {
+            let line = buffer.slice(0, nl);
+            buffer = buffer.slice(nl + 1);
+            if (line.endsWith("\r")) line = line.slice(0, -1);
+            if (!line.startsWith("data: ")) continue;
+            const data = line.slice(6).trim();
+            if (!data) continue;
+            emitGeminiData(data, controller);
+          }
+        };
 
         const stream = new ReadableStream({
           async pull(controller) {
             try {
               const { value, done } = await reader.read();
               if (done) {
+                const rest = decoder.decode();
+                if (rest) buffer += rest;
+                drainBuffer(controller, true);
+                if (finishReason === "MAX_TOKENS") {
+                  const out = {
+                    error:
+                      "O Gemini atingiu o limite máximo de saída antes de concluir. Tente pedir em partes menores.",
+                  };
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(out)}\n\n`));
+                  console.warn(
+                    JSON.stringify({
+                      scope: "gemini.chat",
+                      reqId,
+                      level: "warn",
+                      event: "max_tokens_reached",
+                      durationMs: Date.now() - t0,
+                      chunks,
+                    }),
+                  );
+                }
                 controller.enqueue(encoder.encode("data: [DONE]\n\n"));
                 controller.close();
                 console.log(
@@ -258,41 +336,14 @@ export const Route = createFileRoute("/api/chat")({
                     level: "info",
                     event: "stream_done",
                     durationMs: Date.now() - t0,
+                    chunks,
+                    finishReason: finishReason || "unknown",
                   }),
                 );
                 return;
               }
               buffer += decoder.decode(value, { stream: true });
-              let nl: number;
-              while ((nl = buffer.indexOf("\n")) !== -1) {
-                let line = buffer.slice(0, nl);
-                buffer = buffer.slice(nl + 1);
-                if (line.endsWith("\r")) line = line.slice(0, -1);
-                if (!line.startsWith("data: ")) continue;
-                const data = line.slice(6).trim();
-                if (!data) continue;
-                try {
-                  const parsed = JSON.parse(data);
-                  const parts = parsed?.candidates?.[0]?.content?.parts as
-                    | Array<{ text?: string }>
-                    | undefined;
-                  const text = parts?.map((p) => p.text ?? "").join("") ?? "";
-                  if (text) {
-                    const out = { choices: [{ delta: { content: text } }] };
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(out)}\n\n`));
-                  }
-                } catch (err) {
-                  console.warn(
-                    JSON.stringify({
-                      scope: "gemini.chat",
-                      reqId,
-                      level: "warn",
-                      event: "parse_error",
-                      msg: redact(err instanceof Error ? err.message : String(err), apiKey),
-                    }),
-                  );
-                }
-              }
+              drainBuffer(controller);
             } catch (err) {
               console.error(
                 JSON.stringify({
