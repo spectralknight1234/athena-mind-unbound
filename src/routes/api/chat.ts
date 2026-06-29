@@ -78,57 +78,165 @@ function toGeminiContents(messages: ChatMessage[]): GeminiContent[] {
   return out;
 }
 
+// Mascarar a chave em qualquer string que vá para logs.
+function redact(input: string, apiKey?: string): string {
+  let out = input;
+  if (apiKey) out = out.split(apiKey).join("[REDACTED_KEY]");
+  // qualquer ocorrência de key=... em URLs
+  out = out.replace(/([?&]key=)[^&\s"']+/gi, "$1[REDACTED]");
+  // tokens Bearer
+  out = out.replace(/Bearer\s+[A-Za-z0-9._\-]+/g, "Bearer [REDACTED]");
+  return out;
+}
+
+function newRequestId() {
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  );
+}
+
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const reqId = newRequestId();
+        const t0 = Date.now();
         const apiKey = process.env.GEMINI_API_KEY;
+
         if (!apiKey) {
+          console.error(
+            JSON.stringify({
+              scope: "gemini.chat",
+              reqId,
+              level: "error",
+              event: "missing_api_key",
+              msg: "GEMINI_API_KEY ausente no ambiente",
+            }),
+          );
           return new Response(
             JSON.stringify({
               error:
                 "GEMINI_API_KEY não configurada. Adicione nas Environment Variables da Vercel.",
+              reqId,
             }),
             { status: 500, headers: { "Content-Type": "application/json" } },
           );
         }
 
-        const { messages } = (await request.json()) as { messages: ChatMessage[] };
-
-        const upstream = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-              contents: toGeminiContents(messages),
-              generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
+        let messages: ChatMessage[];
+        try {
+          ({ messages } = (await request.json()) as { messages: ChatMessage[] });
+          if (!Array.isArray(messages)) throw new Error("messages não é array");
+        } catch (err) {
+          console.error(
+            JSON.stringify({
+              scope: "gemini.chat",
+              reqId,
+              level: "error",
+              event: "bad_request",
+              msg: redact(err instanceof Error ? err.message : String(err), apiKey),
             }),
-            signal: request.signal,
-          },
+          );
+          return new Response(
+            JSON.stringify({ error: "Payload inválido", reqId }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        console.log(
+          JSON.stringify({
+            scope: "gemini.chat",
+            reqId,
+            level: "info",
+            event: "upstream_request",
+            model: "gemini-2.5-flash",
+            messages: messages.length,
+          }),
         );
 
+        let upstream: Response;
+        try {
+          upstream = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+                contents: toGeminiContents(messages),
+                generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
+              }),
+              signal: request.signal,
+            },
+          );
+        } catch (err) {
+          const msg = redact(err instanceof Error ? err.message : String(err), apiKey);
+          console.error(
+            JSON.stringify({
+              scope: "gemini.chat",
+              reqId,
+              level: "error",
+              event: "network_error",
+              durationMs: Date.now() - t0,
+              msg,
+            }),
+          );
+          return new Response(
+            JSON.stringify({
+              error: "Falha de rede ao contatar o Gemini. Tente novamente.",
+              reqId,
+            }),
+            { status: 502, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
         if (!upstream.ok || !upstream.body) {
-          const text = await upstream.text().catch(() => "");
-          console.error("Gemini error:", upstream.status, text);
+          const text = redact(await upstream.text().catch(() => ""), apiKey);
+          console.error(
+            JSON.stringify({
+              scope: "gemini.chat",
+              reqId,
+              level: "error",
+              event: "upstream_error",
+              status: upstream.status,
+              durationMs: Date.now() - t0,
+              body: text.slice(0, 1000),
+            }),
+          );
           if (upstream.status === 429) {
             return new Response(
-              JSON.stringify({ error: "Limite de requisições do Gemini atingido. Aguarde um momento." }),
+              JSON.stringify({
+                error: "Limite de requisições do Gemini atingido. Aguarde um momento.",
+                reqId,
+              }),
               { status: 429, headers: { "Content-Type": "application/json" } },
             );
           }
           if (upstream.status === 401 || upstream.status === 403) {
             return new Response(
-              JSON.stringify({ error: "GEMINI_API_KEY inválida ou sem permissão." }),
+              JSON.stringify({
+                error: "GEMINI_API_KEY inválida ou sem permissão.",
+                reqId,
+              }),
               { status: upstream.status, headers: { "Content-Type": "application/json" } },
             );
           }
-          return new Response(JSON.stringify({ error: "Erro no Gemini" }), {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          });
+          if (upstream.status >= 500) {
+            return new Response(
+              JSON.stringify({
+                error: "Gemini indisponível no momento. Tente novamente.",
+                reqId,
+              }),
+              { status: 502, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          return new Response(
+            JSON.stringify({ error: "Erro no Gemini", reqId }),
+            { status: 500, headers: { "Content-Type": "application/json" } },
+          );
         }
+
 
         // Transform Gemini SSE -> OpenAI-compatible SSE consumed by the client.
         const reader = upstream.body.getReader();
