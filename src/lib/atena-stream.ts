@@ -58,6 +58,10 @@ export async function streamChat({
         }
         try {
           const parsed = JSON.parse(data);
+          if (typeof parsed.error === "string") {
+            onError(parsed.error);
+            return;
+          }
           const content = parsed.choices?.[0]?.delta?.content as string | undefined;
           if (content) onDelta(content);
         } catch {
