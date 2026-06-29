@@ -36,34 +36,47 @@ export async function streamChat({
   const decoder = new TextDecoder();
   let buffer = "";
   let done = false;
+  let sawDone = false;
 
-  while (!done) {
-    const { value, done: d } = await reader.read();
-    if (d) break;
-    buffer += decoder.decode(value, { stream: true });
+  try {
+    while (!done) {
+      const { value, done: d } = await reader.read();
+      if (d) break;
+      buffer += decoder.decode(value, { stream: true });
 
-    let nl: number;
-    while ((nl = buffer.indexOf("\n")) !== -1) {
-      let line = buffer.slice(0, nl);
-      buffer = buffer.slice(nl + 1);
-      if (line.endsWith("\r")) line = line.slice(0, -1);
-      if (!line.startsWith("data: ")) continue;
-      const data = line.slice(6).trim();
-      if (data === "[DONE]") {
-        done = true;
-        break;
-      }
-      try {
-        const parsed = JSON.parse(data);
-        const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-        if (content) onDelta(content);
-      } catch {
-        buffer = line + "\n" + buffer;
-        break;
+      let nl: number;
+      while ((nl = buffer.indexOf("\n")) !== -1) {
+        let line = buffer.slice(0, nl);
+        buffer = buffer.slice(nl + 1);
+        if (line.endsWith("\r")) line = line.slice(0, -1);
+        if (!line.startsWith("data: ")) continue;
+        const data = line.slice(6).trim();
+        if (data === "[DONE]") {
+          sawDone = true;
+          done = true;
+          break;
+        }
+        try {
+          const parsed = JSON.parse(data);
+          const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+          if (content) onDelta(content);
+        } catch {
+          onError("A resposta foi interrompida por um erro no stream. Tente novamente.");
+          return;
+        }
       }
     }
+  } catch {
+    onError("A conexão com o Gemini foi interrompida. Tente novamente.");
+    return;
+  } finally {
+    reader.cancel().catch(() => {});
   }
 
+  if (!sawDone) {
+    onError("A resposta foi encerrada antes de terminar. Tente novamente.");
+    return;
+  }
   onDone();
 }
 
