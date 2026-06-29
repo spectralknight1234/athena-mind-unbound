@@ -246,40 +246,81 @@ export const Route = createFileRoute("/api/chat")({
 
         const stream = new ReadableStream({
           async pull(controller) {
-            const { value, done } = await reader.read();
-            if (done) {
-              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-              controller.close();
-              return;
-            }
-            buffer += decoder.decode(value, { stream: true });
-            let nl: number;
-            while ((nl = buffer.indexOf("\n")) !== -1) {
-              let line = buffer.slice(0, nl);
-              buffer = buffer.slice(nl + 1);
-              if (line.endsWith("\r")) line = line.slice(0, -1);
-              if (!line.startsWith("data: ")) continue;
-              const data = line.slice(6).trim();
-              if (!data) continue;
-              try {
-                const parsed = JSON.parse(data);
-                const parts = parsed?.candidates?.[0]?.content?.parts as
-                  | Array<{ text?: string }>
-                  | undefined;
-                const text = parts?.map((p) => p.text ?? "").join("") ?? "";
-                if (text) {
-                  const out = { choices: [{ delta: { content: text } }] };
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(out)}\n\n`));
-                }
-              } catch {
-                // ignore parse errors
+            try {
+              const { value, done } = await reader.read();
+              if (done) {
+                controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                controller.close();
+                console.log(
+                  JSON.stringify({
+                    scope: "gemini.chat",
+                    reqId,
+                    level: "info",
+                    event: "stream_done",
+                    durationMs: Date.now() - t0,
+                  }),
+                );
+                return;
               }
+              buffer += decoder.decode(value, { stream: true });
+              let nl: number;
+              while ((nl = buffer.indexOf("\n")) !== -1) {
+                let line = buffer.slice(0, nl);
+                buffer = buffer.slice(nl + 1);
+                if (line.endsWith("\r")) line = line.slice(0, -1);
+                if (!line.startsWith("data: ")) continue;
+                const data = line.slice(6).trim();
+                if (!data) continue;
+                try {
+                  const parsed = JSON.parse(data);
+                  const parts = parsed?.candidates?.[0]?.content?.parts as
+                    | Array<{ text?: string }>
+                    | undefined;
+                  const text = parts?.map((p) => p.text ?? "").join("") ?? "";
+                  if (text) {
+                    const out = { choices: [{ delta: { content: text } }] };
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(out)}\n\n`));
+                  }
+                } catch (err) {
+                  console.warn(
+                    JSON.stringify({
+                      scope: "gemini.chat",
+                      reqId,
+                      level: "warn",
+                      event: "parse_error",
+                      msg: redact(err instanceof Error ? err.message : String(err), apiKey),
+                    }),
+                  );
+                }
+              }
+            } catch (err) {
+              console.error(
+                JSON.stringify({
+                  scope: "gemini.chat",
+                  reqId,
+                  level: "error",
+                  event: "stream_error",
+                  durationMs: Date.now() - t0,
+                  msg: redact(err instanceof Error ? err.message : String(err), apiKey),
+                }),
+              );
+              controller.error(new Error("Stream interrompido"));
             }
           },
           cancel() {
             reader.cancel().catch(() => {});
+            console.log(
+              JSON.stringify({
+                scope: "gemini.chat",
+                reqId,
+                level: "info",
+                event: "client_cancel",
+                durationMs: Date.now() - t0,
+              }),
+            );
           },
         });
+
 
         return new Response(stream, {
           headers: {
